@@ -29,12 +29,9 @@ jobs:
       - name: Install Android SDK
         run: |
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
-          echo "Using SDK manager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses || true
-          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-          
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0"
+
       - name: Extract source ZIP
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
@@ -45,10 +42,23 @@ jobs:
 
       - name: Build APK
         run: |
+          cat > "$GITHUB_WORKSPACE/jvm17.init.gradle" <<'EOF'
+          allprojects {
+            tasks.configureEach { task ->
+              if (task.name == 'compileDebugJavaWithJavac') {
+                task.sourceCompatibility = '17'
+                task.targetCompatibility = '17'
+              }
+              if (task.name == 'compileDebugKotlin') {
+                task.kotlinOptions.jvmTarget = '17'
+              }
+            }
+          }
+          EOF
           PROJECT=$(find extracted -name settings.gradle.kts -printf '%h\n' | head -n 1)
           test -n "$PROJECT"
           cd "$PROJECT"
-          gradle --no-daemon assembleDebug
+          gradle --no-daemon --init-script "$GITHUB_WORKSPACE/jvm17.init.gradle" assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
